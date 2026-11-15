@@ -65,18 +65,25 @@ python scripts/selftest.py --out work/独立视觉测试目录 --vision
 
 源码仓库：<https://github.com/harisucici/pdf-web-replica>。当前为公开仓库，可直接克隆。
 
+首次从 GitHub 安装（以 Hermes 为例）：
+
 ```sh
 git clone https://github.com/harisucici/pdf-web-replica.git
 cd pdf-web-replica
 python3 scripts/install.py --agent hermes
 ```
 
-更新已有安装：
+更新已有安装时，先进入本地仓库目录，再拉取代码并更新技能副本：
 
 ```sh
+cd /path/to/pdf-web-replica
 git pull --ff-only
 python3 scripts/install.py --agent hermes --update
 ```
+
+将 `/path/to/pdf-web-replica` 替换为实际仓库路径。其他 Agent 将 `hermes` 替换为 `codex`、`opencode` 或 `openclaw`；安装到多个 Agent 时，分别执行对应的安装或更新命令。
+
+`--update` 会备份已安装的旧版本，然后替换技能文件。仓库源码与 Agent 已安装的技能是独立副本，**仅执行 `git pull` 不会更新已安装的技能**，还需执行上述带 `--update` 的命令。更新后开启新的 Agent 会话加载新版。此过程不修改 Agent 设置、模型或权限。
 
 版本号位于 `SKILL.md` 的 `metadata.version`。发布新版本时，同步更新 `CHANGELOG.md`、运行检查，再建立对应的 `vX.Y.Z` 标签。打包命令只收录技能文件，不会收录 Git 历史、测试产物或 PDF：
 
