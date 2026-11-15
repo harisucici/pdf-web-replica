@@ -1,5 +1,7 @@
 # Recovery paths
 
+[中文](../docs/zh/references/recovery.md) | [English](recovery.md) | [日本語](../docs/ja/references/recovery.md)
+
 Accept the PDF request first, inventory what is available, and choose an actual processing route. Do not return a blanket "PDF not supported" before checking. Complete independent pages and files while recording specific blockers. Do not claim that any software can guarantee successful processing of every possible byte stream.
 
 | Condition | Recovery |

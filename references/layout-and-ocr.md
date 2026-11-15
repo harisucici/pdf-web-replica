@@ -1,5 +1,7 @@
 # Layout and OCR procedure
 
+[中文](../docs/zh/references/layout-and-ocr.md) | [English](layout-and-ocr.md) | [日本語](../docs/ja/references/layout-and-ocr.md)
+
 ## Inventory before layout
 
 Read every page's ledger entry. A document may combine scans, genuine text, pre-existing invisible OCR, vector diagrams, tables, forms, different crop boxes and rotations. Do not extrapolate the first page's format to the whole document. The CLI preserves native vectors, genuine small images and positioned Unicode text where possible, and excludes large page facsimiles. Scan pages still need native layout reconstruction after OCR.
@@ -30,3 +32,17 @@ After changing page JSON, run `refresh <output>` to regenerate the viewer and te
 Open the site in a real browser and compare it with source renders at the same scale. Check all requested pages. Test initial loading, rapid page changes, rotated pages, true blank pages, a long-to-short page change, source-language copy/search, and local `file://` access when that is the delivery method. Navigation must reset scroll; a data load failure must not masquerade as a blank source page.
 
 Complete the four review dimensions only after evidence exists. OCR confidence, page counts, a successful build, an attractive sample or a single screenshot does not prove full-document fidelity. Keep unresolved issues visible in `audit.json` and in the delivery message.
+
+## Raster image policy and older outputs
+
+Image size is not proof that pixels are artwork. A scan inside wide PDF margins may occupy only 59% of the canvas; multiple image tiles can jointly form a page. The extractor uses clipped placement, width/height span and rectangle-union coverage to flag such rasters. Flagged rasters are excluded before writing illustration assets. Even smaller extracted images start as `illustration_candidate` with `reviewed: false`; the reader withholds them until actual source comparison establishes isolated artwork. Geometry checks also apply in the reader, including matrix-only placement and tiled images. Do not lower a scan's bbox or set an approval flag merely to restore its appearance.
+
+For an actual isolated illustration, inspect the asset and its source region, crop away any paragraph/page content if needed, then set `role: "illustration"` and `reviewed: true` in its page JSON. Large photographs/artwork that trigger the conservative scan guard need explicit isolation/reconstruction; the guard does not assert that they contain text. Regenerate with `refresh <output>`. The audit rejects unreviewed candidates.
+
+To update an older output without redoing OCR or overwriting manual text, run from the updated skill root:
+
+```sh
+python scripts/run.py refresh "/path/to/outputs/example"
+```
+
+Refresh migrates old page JSON: probable page rasters move from `images` into `excluded_images` metadata, and other unapproved images become candidates. Changed pages have review flags reset, while text, manual shapes and notes are preserved. The old image files are not deleted or moved; do not distribute them as artwork. Inspect the deliverable's asset directory before publication. Reconstruct missing text/layout and record actual source verification before acceptance. Refresh updates the site's reader template and page data; existing hosted copies still need to be redeployed through the user's authorized publication workflow.

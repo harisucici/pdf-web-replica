@@ -9,6 +9,44 @@ def call(*args,ok=(0,),env=None):
  if r.returncode not in ok:raise AssertionError(f'CLI failed: {args}: {r.stdout[-1000:]} {r.stderr[-1000:]}')
  return r
 
+def raster_checks(w, scan):
+ doc=fitz.open()
+ margin=(85.6,72,526.4,720)
+ for rotation in (0,90):
+  p=doc.new_page(width=612,height=792);p.insert_image(margin,stream=scan,keep_proportion=False);p.set_rotation(rotation)
+ p=doc.new_page(width=612,height=792)
+ p.insert_image((80,60,532,396),stream=scan,keep_proportion=False)
+ p.insert_image((80,396,532,732),stream=scan,keep_proportion=False)
+ p=doc.new_page(width=612,height=792);p.insert_image(margin,stream=scan,keep_proportion=False);p.insert_text((30,35),'Long native header does not reconstruct the scanned body',fontsize=10)
+ fixture=w/'raster-regression.pdf';doc.save(fixture);doc.close()
+ call('inspect',fixture,'--out',w/'raster-inspection.json')
+ inv=json.loads((w/'raster-inspection.json').read_text())
+ assert [p['kind'] for p in inv['pages']]==['scan','scan','scan','hybrid']
+ assert .58<inv['pages'][0]['large_image_coverage']<.60
+ assert inv['pages'][2]['large_image_coverage']<.5
+ out=w/'raster-regression'
+ call('build',fixture,'--out',out,'--ocr','none')
+ for no in range(1,5):
+  d=json.loads((out/'pages'/f'{no:05}.json').read_text());assert not d['images'] and d['status']=='needs_ocr'
+ assert not list((out/'site').glob('illustrations/*'))
+ # Older page data: refresh must remove a margin scan, preserve text/manual notes,
+ # and invalidate earlier acceptance rather than merely changing reader templates.
+ target=w/'mixed/pages/00001.json';d=json.loads(target.read_text());original_blocks=d['blocks'];original_notes=d.get('review_notes')
+ candidate=d['images'][0];assert candidate['role']=='illustration_candidate' and candidate['reviewed'] is False
+ d['images']=[dict(candidate, bbox=[58.8,59.5,361.2,535.5],matrix=[302.4,0,0,476,58.8,59.5],role='illustration',reviewed=True)]
+ d['review']={k:True for k in ['text','layout','fonts','languages']};target.write_text(json.dumps(d))
+ call('refresh',w/'mixed');after=json.loads(target.read_text())
+ assert not after['images'] and after['excluded_images']
+ assert after['blocks']==original_blocks and after.get('review_notes')==original_notes
+ assert not any(after['review'].values())
+ published=json.loads((w/'mixed/site/pages/00001.js').read_text().split('=',1)[1].strip().removesuffix(';'));assert not published['images'] and published['excluded_images']
+ audit=json.loads(call('audit',w/'mixed',ok=(3,)).stdout)
+ assert any(i['issue']=='excluded_page_rasters_require_reconstruction' for i in audit['issues'])
+ # A genuine small illustration can be explicitly approved and remains intact.
+ after['images']=[dict(candidate,role='illustration',reviewed=True)];target.write_text(json.dumps(after))
+ call('refresh',w/'mixed');assert json.loads(target.read_text())['images'][0]['reviewed'] is True
+
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);p.add_argument('--vision',action='store_true');a=p.parse_args();w=a.out.resolve();w.mkdir(parents=True,exist_ok=True);source=w/'fixtures';source.mkdir(exist_ok=True)
  doc=fitz.open();p1=doc.new_page(width=420,height=595);p1.draw_rect((30,40,390,170),fill=(.93,.93,.93));p1.insert_text((45,75),'Native PDF: selectable text',fontsize=15);p1.insert_text((45,110),'日本語の文字',fontname='japan',fontsize=13);p1.insert_text((45,140),'한국어 텍스트',fontname='korea',fontsize=13)
@@ -32,5 +70,6 @@ def main():
   adapter=w/'external adapter.py';adapter.write_text("import json,sys;from pathlib import Path;assert Path(sys.argv[1]).is_file();Path(sys.argv[2]).write_text(json.dumps({'coordinate_space':'normalized','blocks':[{'text':'External adapter 한국어','bbox':[.1,.1,.8,.2]}]}))")
   command=json.dumps([sys.executable,str(adapter),'{image}','{output}'])
   call('build',fixture,'--out',w/'mixed','--resume','--reprocess','--pages','5','--ocr','external','--ocr-command-json',command);d=json.loads((w/'mixed/pages/00005.json').read_text());assert 'External adapter' in d['text']
- report={'status':'passed','checks':['native Unicode','independent illustrations','blank page','rotation','forms','scan pending state','hybrid scan pending state','resume preserves edits','encrypted password handling','malformed input diagnostics','embedded PDF extraction','OCR import coordinates','audit refuses unfinished work','batch continues on errors']+(['macOS multilingual Vision OCR','external OCR adapter with spaced paths'] if a.vision else []),'fixture_root':str(w)};(w/'selftest-report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
+ raster_checks(w,scan)
+ report={'status':'passed','checks':['native Unicode','independent illustrations','blank page','rotation','forms','scan pending state','hybrid scan pending state','resume preserves edits','encrypted password handling','malformed input diagnostics','embedded PDF extraction','OCR import coordinates','audit refuses unfinished work','batch continues on errors','margin scans excluded','rotated margin scans excluded','tiled scans excluded','legacy image migration preserves manual text','illustration source review']+(['macOS multilingual Vision OCR','external OCR adapter with spaced paths'] if a.vision else []),'fixture_root':str(w)};(w/'selftest-report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
 if __name__=='__main__':main()

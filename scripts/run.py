@@ -15,7 +15,8 @@ def main():
   if not value or value in seen or not Path(value).is_file():continue
   seen.add(value)
   try:
-   r=subprocess.run([value,'-c','import pymupdf'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
+   probe='import pymupdf; import PIL' if len(sys.argv)>1 and sys.argv[1] in ['analyze','compare'] else 'import pymupdf'
+   r=subprocess.run([value,'-c',probe],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
    if r.returncode==0:selected=value;break
   except (OSError,subprocess.TimeoutExpired):continue
  cli=Path(__file__).with_name('pdf_web.py')

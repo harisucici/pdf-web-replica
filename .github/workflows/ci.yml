@@ -29,11 +29,15 @@ jobs:
         run: |
           python -m compileall -q scripts
           node --check assets/reader.js
+      - name: Reader image policy regression tests
+        run: node scripts/reader_selftest.js
       - name: Synthetic PDF regression tests
         if: runner.os != 'macOS'
         run: python scripts/selftest.py --out "${{ runner.temp }}/pdf-web-replica-tests"
       - name: Synthetic tests including Apple Vision
         if: runner.os == 'macOS'
         run: python scripts/selftest.py --out "${{ runner.temp }}/pdf-web-replica-tests" --vision
+      - name: Fidelity analysis and evidence regression tests
+        run: python scripts/fidelity_selftest.py
       - name: Build distributable archive
         run: python scripts/package.py --out "${{ runner.temp }}/pdf-web-replica-package"

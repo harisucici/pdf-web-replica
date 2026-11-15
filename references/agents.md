@@ -1,12 +1,14 @@
 # Agent integration
 
+[中文](../docs/zh/references/agents.md) | [English](agents.md) | [日本語](../docs/ja/references/agents.md)
+
 This package is an Agent Skills folder, not a Codex-only plugin. Copy the **entire** folder, including scripts and assets. Run its Python commands in the agent's actual execution environment. No agent setting, sandbox, permission, allowlist, or model configuration is changed by the installer.
 
 | Agent | User skill location | Explicit invocation |
 |---|---|---|
-| Hermes Agent | `~/.hermes/skills/pdf-web-replica/` | `/pdf-web-replica <PDF path and request>` |
+| Hermes Agent | `~/.hermes/skills/pdf-web-replica/` | `/pdf-web-replica [PDF path]` |
 | Codex | `$CODEX_HOME/skills/pdf-web-replica/`, default `~/.codex/skills/` | `$pdf-web-replica` |
-| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/pdf-web-replica/`, default `~/.config/opencode/skills/` | `@pdf-web-replica` |
+| OpenCode | `$XDG_CONFIG_HOME/opencode/skills/pdf-web-replica/`, default `~/.config/opencode/skills/` | Ask to use `pdf-web-replica`; the agent loads its `skill` tool |
 | OpenClaw | `~/.openclaw/skills/pdf-web-replica/` | Mention the skill or use the host's skill picker |
 | Other Agent Skills hosts | Their supported skills root | Load `SKILL.md` and resolve its relative files |
 
@@ -20,6 +22,10 @@ python3 scripts/install.py --agent openclaw
 ```
 
 `--root <skill-root>` selects a profile or project explicitly. `--dry-run` prints paths without changes. `--update` keeps a timestamped backup before replacing an existing skill. Open a fresh agent session if its skill catalog is cached.
+
+## Minimal client use
+
+Attach a PDF in a new Hermes conversation and send `/pdf-web-replica`. Alternatively send `/pdf-web-replica "/path/to/example.pdf"`. No repeated layout instructions are needed: the skill defaults to full-document selectable-text reconstruction and source comparison. If no PDF is accessible, specify its path or attach it; if several are ambiguous, identify one. Install in the actual execution machine/profile/backend, not just the desktop host. A missing slash-command listing can indicate a cached session, a different profile, or an installation in the wrong backend. Start a fresh session and verify the installation location. OpenCode uses its skill-loading tool; a universal `@skill-name` shortcut is not assumed.
 
 ## Hermes first
 

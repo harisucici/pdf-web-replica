@@ -3,6 +3,9 @@
 import argparse,hashlib,json,math,os,re,shutil,subprocess,sys,tempfile,time,unicodedata
 from pathlib import Path
 import ocr_backends
+import image_policy
+import fidelity
+import layout_analysis
 try:import pymupdf as fitz
 except ImportError:
  try:import fitz
@@ -61,10 +64,15 @@ def coverage(rect,page):
  r=fitz.Rect(rect)&page.rect
  return max(0,r.width*r.height)/max(1,page.rect.width*page.rect.height)
 
+def page_image_policy(page):
+ images=[{'bbox':rect(item['bbox'],page.rotation_matrix)} for item in page.get_image_info()]
+ flags,union=image_policy.scan_flags(images,page.rect.width,page.rect.height)
+ return images,flags,union
+
 def classify(page):
- text=page.get_text();chars=len(text.strip());replacement=text.count('\ufffd')+text.count('\x00');images=page.get_image_info();large=max([coverage(fitz.Rect(x['bbox'])*page.rotation_matrix,page) for x in images] or [0]);draw_count=len(page.get_drawings())
+ text=page.get_text();chars=len(text.strip());replacement=text.count('\ufffd')+text.count('\x00');images,flags,union=page_image_policy(page);large=max([coverage(x['bbox'],page) for x in images] or [0]);draw_count=len(page.get_drawings())
  if chars==0 and not images and draw_count==0:return 'blank',text,large
- if large>.65:return 'scan' if chars<30 else 'hybrid',text,large
+ if any(flags):return 'scan' if chars<30 else 'hybrid',text,large
  if chars<10 and draw_count>100:return 'outlined-or-graphics',text,large
  if replacement/max(1,chars)>.04:return 'invalid-text-map',text,large
  if chars<10 and images:return 'image-or-scan',text,large
@@ -119,6 +127,8 @@ def extract_fonts(doc,page,site,cache):
 
 def native_blocks(doc,page,site,font_cache):
  blocks=[];images=[];m=page.rotation_matrix;fonts,warnings=extract_fonts(doc,page,site,font_cache)
+ image_info,image_flags,_=page_image_policy(page)
+ blocked_boxes={tuple(im['bbox']) for im,reason in zip(image_info,image_flags) if reason}
  for block in page.get_text('dict')['blocks']:
   if block['type']==0:
    for line in block['lines']:
@@ -130,15 +140,16 @@ def native_blocks(doc,page,site,font_cache):
      blocks.append({'text':t,'bbox':rect(raw,m),'origin':point(span['origin'],m),'font_size':span['size'],'font_family':f['family'] if f else None,'font_file':f['file'] if f else None,'source_font':span['font'],'color':color(span['color']),'bold':bool(span['flags']&16),'italic':bool(span['flags']&2),'angle':angle,'advance':advance,'source':'native','role':'text'})
   elif block['type']==1:
    b=rect(block['bbox'],m)
-   if coverage(b,page)>.65:
-    warnings.append('full_page_image_excluded_from_web_content');continue
+   if tuple(b) in blocked_boxes or image_policy.scan_flags([{'bbox':b}],page.rect.width,page.rect.height)[0][0]:
+    warnings.append('page_raster_excluded_from_web_content');continue
    try:
     data=block['image'];image_id=hashlib.sha256(data).hexdigest()[:20];ext=block.get('ext','png')
     if ext not in ['png','jpg','jpeg','webp','gif']:
      data=fitz.Pixmap(data).tobytes('png');ext='png'
     filename=f'illustrations/{image_id}.{ext}';dest=site/filename;dest.parent.mkdir(exist_ok=True);dest.write_bytes(data)
     transform=list(fitz.Matrix(*block.get('transform',(b[2]-b[0],0,0,b[3]-b[1],b[0],b[1])))*m)
-    images.append({'file':filename,'bbox':b,'matrix':transform})
+    images.append({'file':filename,'bbox':b,'matrix':transform,'role':'illustration_candidate','reviewed':False})
+    warnings.append('illustration_candidates_require_source_review')
    except Exception as e:warnings.append('illustration_extract_error:'+str(e))
  try:
   for widget in page.widgets() or []:
@@ -189,15 +200,26 @@ def normalize_ocr(result,width,height):
  return blocks
 
 def refresh(out):
- out=Path(out);manifest=json.loads((out/'manifest.json').read_text());site=out/'site';summary=[];text=[]
+ out=Path(out);manifest=json.loads((out/'manifest.json').read_text());site=out/'site';site.mkdir(exist_ok=True);summary=[];text=[];search_index=[];requests=[];stamp=time.time()
+ # Fingerprints include the actual viewer templates, installed before page export.
+ for name in ['index.html','reader.js','reader.css']:
+  value=(ROOT/'assets'/name).read_text().replace('__BUILD__',str(stamp));(site/name).write_text(value,encoding='utf-8')
  for no in manifest['selected_pages']:
   filename=out/'pages'/f'{no:05}.json'
   if not filename.exists():summary.append({'page':no,'status':'pending','width':612,'height':792});continue
-  data=json.loads(filename.read_text());write_json(site/'pages'/f'{no:05}.js',data,js=f'window.PDF_PAGES[{no}]=')
-  summary.append({k:data[k] for k in ['page','width','height','kind','status','warnings']});text.append(f'\n\n========== PDF page {no} ==========\n'+data.get('text',''))
- manifest['pages']=summary;manifest['updated_at']=time.time();manifest['status']='draft';write_json(out/'manifest.json',manifest);write_json(site/'document.js',{'title':manifest['title'],'pages':summary,'draft':True,'version':str(manifest['updated_at'])},js='window.PDF_DOCUMENT=');(out/'extracted.txt').write_text(''.join(text).lstrip(),encoding='utf-8');shutil.copy(out/'extracted.txt',site/'extracted.txt')
- for name in ['index.html','reader.js','reader.css']:
-  value=(ROOT/'assets'/name).read_text().replace('__BUILD__',str(manifest['updated_at']));(site/name).write_text(value,encoding='utf-8')
+  data=json.loads(filename.read_text());image_policy.enforce_image_policy(data)
+  current=fidelity.fingerprint(out,data)
+  signatures=data.get('review_signatures',{})
+  for check in fidelity.CHECKS:
+   if data.get('review',{}).get(check) and signatures.get(check)!=current:data['review'][check]=False
+  data['render_fingerprint']=current;write_json(filename,data);write_json(site/'pages'/f'{no:05}.js',data,js=f'window.PDF_PAGES[{no}]=')
+  summary.append({k:data[k] for k in ['page','width','height','kind','status','warnings']});search_index.append({'page':no,'text':data.get('text','')});text.append(f'\n\n========== PDF page {no} ==========\n'+data.get('text',''))
+  requests.append({'page':no,'render_fingerprint':current,'url':f'index.html?qa=1#page={no}','capture':f'{no:05}.png','metadata':f'{no:05}.json'})
+ manifest['pages']=summary;manifest['updated_at']=stamp;manifest['status']='draft';write_json(out/'manifest.json',manifest)
+ write_json(out/'qa'/'capture-requests.json',{'pages':requests,'instructions':'Capture the default web page after window.PDF_REPLICA_QA.ready is true. Save the page crop and that metadata, plus captured_with. Never capture the source comparison view.'})
+ write_json(site/'text-index.js',search_index,js='window.PDF_TEXT_INDEX=')
+ write_json(site/'document.js',{'title':manifest.get('display_title',manifest['title']),'subtitle':manifest.get('subtitle','PDF WEB REPLICA · 校对中'),'pages':summary,'draft':True,'version':str(stamp)},js='window.PDF_DOCUMENT=')
+ (out/'extracted.txt').write_text(''.join(text).lstrip(),encoding='utf-8');shutil.copy(out/'extracted.txt',site/'extracted.txt')
  return manifest
 
 def build(args):
@@ -246,24 +268,33 @@ def build(args):
    data={'page':no,'width':width,'height':height,'rotation':page.rotation,'kind':kind,'status':status,'blocks':blocks,'shapes':shapes,'images':images,'warnings':sorted(set(warnings)),'text':'\n'.join(b['text'] for b in sorted(blocks,key=lambda x:(round(x['bbox'][1],1),x['bbox'][0]))),'review':{k:False for k in ['text','layout','fonts','languages']}}
   except Exception as e:data={'page':no,'width':612,'height':792,'rotation':0,'kind':'error','status':'error','blocks':[],'shapes':[],'images':[],'warnings':[str(e)],'text':'','review':{k:False for k in ['text','layout','fonts','languages']}}
   write_json(target,data);print(json.dumps({'page':no,'total_selected':len(selected),'status':data['status']},ensure_ascii=False),flush=True)
- doc.close();manifest=refresh(out);print(json.dumps({'output':str(out),'site':str(site/'index.html'),'pages':len(selected),'pending':sum(p['status'] in ['needs_ocr','error','pending'] for p in manifest['pages']),'status':'draft'},ensure_ascii=False));return 0
+ doc.close();manifest=refresh(out);print(json.dumps({'output':str(out),'site':str(site/'index.html'),'pages':len(selected),'pending':sum(p['status'] in ['needs_ocr','error','pending'] for p in manifest['pages']),'pending_review_pages':len(selected),'next_steps':['analyze source pages','reconstruct from source','capture default web pages','compare and correct','record source review','audit'],'status':'draft'},ensure_ascii=False));return 0
 
 def audit(out,allow_range=False):
  out=Path(out);m=json.loads((out/'manifest.json').read_text());issues=[];verified=0
  if m['page_count']==0:issues.append({'issue':'pdf_has_no_pages'})
  if not allow_range and len(m['selected_pages'])!=m['page_count']:issues.append({'issue':'full_document_range_not_processed'})
  for no in m['selected_pages']:
-  path=out/'pages'/f'{no:05}.json'
+  start=len(issues);path=out/'pages'/f'{no:05}.json'
   if not path.exists():issues.append({'page':no,'issue':'missing_page'});continue
-  p=json.loads(path.read_text());review=p.get('review',{})
+  p=json.loads(path.read_text());review=p.get('review',{});current=fidelity.fingerprint(out,p)
+  image_flags,_=image_policy.scan_flags(p.get('images',[]),p['width'],p['height'])
+  for im,reason in zip(p.get('images',[]),image_flags):
+   if not image_policy.image_approved(im,reason):issues.append({'page':no,'issue':reason or 'unreviewed_illustration','file':im.get('file')})
+  if p.get('excluded_images') and not review.get('layout'):issues.append({'page':no,'issue':'excluded_page_rasters_require_reconstruction'})
   if p['status'] in ['error','needs_ocr']:issues.append({'page':no,'issue':p['status']})
-  if p['kind']!='blank' and not all(review.get(k) for k in ['text','layout','fonts','languages']):issues.append({'page':no,'issue':'not_fully_verified'})
-  else:verified+=1
+  if p.get('layout_needs_sync'):issues.append({'page':no,'issue':'layout_text_not_synchronized'})
+  for difference in p.get('remaining_differences',[]):issues.append({'page':no,'issue':'unresolved_source_difference','description':difference})
+  if not all(review.get(k) for k in fidelity.CHECKS):issues.append({'page':no,'issue':'not_fully_verified'})
+  elif any(p.get('review_signatures',{}).get(k)!=current for k in fidelity.CHECKS):issues.append({'page':no,'issue':'review_record_stale'})
+  evidence=fidelity.evidence_issue(out,p)
+  if evidence:issues.append({'page':no,'issue':evidence})
   if p['kind']!='blank' and not p['blocks']:issues.append({'page':no,'issue':'no_selectable_text_review_required'})
-  for b in p['blocks']:
-   r=b['bbox']
+  for block in p['blocks']:
+   r=block['bbox']
    if r[2]<0 or r[3]<0 or r[0]>p['width']+2 or r[1]>p['height']+2:issues.append({'page':no,'issue':'text_outside_page'})
- result={'acceptance':'passed-recorded-review' if not issues else 'not-passed','selected_pages':len(m['selected_pages']),'verified_pages':verified,'issues':issues,'note':'Review records require actual source comparison; this audit does not infer visual equality.'};write_json(out/'audit.json',result);print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not issues else 3
+  if len(issues)==start:verified+=1
+ result={'acceptance':'passed-recorded-review' if not issues else 'not-passed','selected_pages':len(m['selected_pages']),'verified_pages':verified,'issues':issues,'note':'Recorded source review and current browser evidence are required. Pixel metrics are not a reconstruction percentage.'};write_json(out/'audit.json',result);print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not issues else 3
 
 def main():
  p=argparse.ArgumentParser();sp=p.add_subparsers(dest='command',required=True)
@@ -275,10 +306,13 @@ def main():
  a=sp.add_parser('audit');a.add_argument('out');a.add_argument('--allow-range',action='store_true')
  a=sp.add_parser('refresh');a.add_argument('out')
  a=sp.add_parser('import-ocr');a.add_argument('out');a.add_argument('--page',type=int,required=True);a.add_argument('--json',required=True)
+ a=sp.add_parser('analyze');a.add_argument('out');a.add_argument('--pages',default='all')
+ a=sp.add_parser('compare');a.add_argument('out');a.add_argument('--captures',required=True);a.add_argument('--pages',default='all')
+ a=sp.add_parser('apply-layout');a.add_argument('out');a.add_argument('--page',type=int,required=True);a.add_argument('--json',required=True)
  a=sp.add_parser('review');a.add_argument('out');a.add_argument('--pages',required=True);a.add_argument('--checks',required=True);a.add_argument('--note',required=True)
  args=p.parse_args()
  try:
-  if args.command=='doctor':print(json.dumps({'python':sys.executable,'pymupdf':getattr(fitz,'VersionBind',None),'ocr':ocr_backends.capabilities(),'repair':{x:shutil.which(x) for x in ['qpdf','mutool','gs','pdftoppm']}},ensure_ascii=False,indent=2));return 0 if fitz else 2
+  if args.command=='doctor':print(json.dumps({'python':sys.executable,'pymupdf':getattr(fitz,'VersionBind',None),'ocr':ocr_backends.capabilities(),'fidelity_analysis':bool(__import__('importlib.util',fromlist=['find_spec']).find_spec('PIL')),'repair':{x:shutil.which(x) for x in ['qpdf','mutool','gs','pdftoppm']}},ensure_ascii=False,indent=2));return 0 if fitz else 2
   if args.command=='inspect':
    doc=open_pdf(args.input,args.password_env);data=inventory(doc);doc.close()
    if args.out:write_json(args.out,data)
@@ -292,26 +326,48 @@ def main():
    doc.close();write_json(dest/'attachments.json',files);print(json.dumps(files,ensure_ascii=False));return 0
   if args.command=='build':return build(args)
   if args.command=='batch':
-   files=sorted(p for p in Path(args.input).expanduser().resolve().rglob('*') if p.is_file() and p.suffix.lower()=='.pdf');base=Path(args.out).resolve();records=[]
+   batch_root=Path(args.input).expanduser().resolve();files=sorted(p for p in batch_root.rglob('*') if p.is_file() and p.suffix.lower()=='.pdf');base=Path(args.out).resolve();records=[]
    for f in files:
-    run=argparse.Namespace(**vars(args));run.input=str(f);run.out=str(base/(f.stem+'-'+hashlib.sha256(str(f).encode()).hexdigest()[:8]))
+    run=argparse.Namespace(**vars(args));run.input=str(f);run.out=str(base/f.relative_to(batch_root).with_suffix(''))
     try:build(run);records.append({'input':str(f),'out':run.out,'status':'draft'})
     except Exception as e:records.append({'input':str(f),'status':'error','reason':str(e)})
    write_json(base/'batch-report.json',records);print(json.dumps({'files':len(files),'errors':sum(r['status']=='error' for r in records)},ensure_ascii=False));return 0 if all(r['status']!='error' for r in records) else 2
   if args.command=='audit':return audit(args.out,args.allow_range)
   if args.command=='refresh':refresh(args.out);return 0
+  if args.command=='analyze':
+   out=Path(args.out);manifest=json.loads((out/'manifest.json').read_text());selected=page_numbers(args.pages,manifest['page_count']);selected=[n for n in selected if n in manifest['selected_pages']];print(json.dumps(layout_analysis.analyze(out,selected,write_json),ensure_ascii=False));return 0
+  if args.command=='compare':
+   out=Path(args.out);manifest=json.loads((out/'manifest.json').read_text());records=[]
+   for no in page_numbers(args.pages,manifest['page_count']):
+    try:records.append(fidelity.compare_page(out,json.loads((out/'pages'/f'{no:05}.json').read_text()),args.captures))
+    except (ValueError,OSError,KeyError) as error:records.append({'page':no,'status':'needs_attention','error':str(error)})
+   write_json(out/'qa'/'comparison-report.json',{'pages':records});print(json.dumps({'pages':[{'page':r['page'],'status':r['status'],'error':r.get('error')} for r in records]},ensure_ascii=False));return 0 if records and all(r['status']=='within_threshold' for r in records) else 3
+  if args.command=='apply-layout':
+   out=Path(args.out);target=out/'pages'/f'{args.page:05}.json';data=json.loads(target.read_text());patch=json.loads(Path(args.json).read_text());allowed={'blocks','text','shapes','images','web_layout','background_color','reference_image','remaining_differences'}
+   if not isinstance(patch,dict) or set(patch)-allowed:raise PDFError('layout_patch_contains_unsupported_fields')
+   if 'remaining_differences' in patch and (not isinstance(patch['remaining_differences'],list) or not all(isinstance(v,str) and v.strip() for v in patch['remaining_differences'])):raise PDFError('remaining_differences_must_be_a_list_of_nonempty_descriptions')
+   if 'blocks' in patch and 'text' not in patch:patch['text']='\n'.join(b['text'] for b in patch['blocks'])
+   if data.get('web_layout') and ('blocks' in patch or 'text' in patch) and 'web_layout' not in patch:data['layout_needs_sync']=True
+   if 'web_layout' in patch:data['layout_needs_sync']=False
+   data.update(patch);data['review']={k:False for k in fidelity.CHECKS};data['review_signatures']={};data['status']='draft' if data.get('blocks') or data.get('kind')=='blank' else 'needs_ocr';write_json(target,data);refresh(out);return 0
   if args.command=='import-ocr':
-   out=Path(args.out);target=out/'pages'/f'{args.page:05}.json';data=json.loads(target.read_text());result=json.loads(Path(args.json).read_text());data['blocks']=normalize_ocr(result,data['width'],data['height']);data['text']='\n'.join(b['text'] for b in data['blocks']);data['status']='draft' if data['blocks'] else 'needs_ocr';data['review']={k:False for k in ['text','layout','fonts','languages']};data['warnings'].append('imported_ocr_requires_source_verification');write_json(target,data);refresh(out);return 0
+   out=Path(args.out);target=out/'pages'/f'{args.page:05}.json';data=json.loads(target.read_text());result=json.loads(Path(args.json).read_text());data['blocks']=normalize_ocr(result,data['width'],data['height']);data['text']='\n'.join(b['text'] for b in data['blocks']);data['status']='draft' if data['blocks'] else 'needs_ocr';data['review']={k:False for k in ['text','layout','fonts','languages']};data['warnings'].append('imported_ocr_requires_source_verification');data['layout_needs_sync']=bool(data.get('web_layout'));write_json(target,data);refresh(out);return 0
   if args.command=='review':
-   out=Path(args.out);m=json.loads((out/'manifest.json').read_text());checks=args.checks.split(',')
-   if any(k not in ['text','layout','fonts','languages'] for k in checks):raise PDFError('unknown_review_dimension')
+   out=Path(args.out);m=json.loads((out/'manifest.json').read_text());checks=args.checks.split(',');prepared=[]
+   if any(k not in fidelity.CHECKS for k in checks):raise PDFError('unknown_review_dimension')
    for no in page_numbers(args.pages,m['page_count']):
     target=out/'pages'/f'{no:05}.json'
     if not target.exists():raise PDFError('cannot_review_unprocessed_page:'+str(no))
     d=json.loads(target.read_text())
-    if d['status'] in ['needs_ocr','error']:raise PDFError('cannot_review_unresolved_page:'+str(no))
-    for k in checks:d['review'][k]=True
-    d.setdefault('review_notes',[]).append({'checks':checks,'note':args.note,'time':time.time()});write_json(target,d)
+    if d['status'] in ['needs_ocr','error'] or d.get('layout_needs_sync') or d.get('remaining_differences'):raise PDFError('cannot_review_unresolved_page:'+str(no))
+    if any(k in checks for k in ['layout','fonts']):
+     reason=fidelity.evidence_issue(out,d)
+     if reason:raise PDFError(reason+': page '+str(no)+'; capture the default web page, compare, and resolve differences first')
+    current=fidelity.fingerprint(out,d)
+    for k in checks:d['review'][k]=True;d.setdefault('review_signatures',{})[k]=current
+    d.setdefault('review_notes',[]).append({'checks':checks,'note':args.note,'time':time.time(),'render_fingerprint':current});prepared.append((target,d))
+   for target,d in prepared:write_json(target,d)
    refresh(out);return 0
+
  except (PDFError,ValueError,FileNotFoundError,PermissionError) as e:print(json.dumps({'error':str(e),'status':'needs-attention'},ensure_ascii=False),file=sys.stderr);return 2
 if __name__=='__main__':raise SystemExit(main())

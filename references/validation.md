@@ -1,5 +1,7 @@
 # Validation record
 
+[中文](../docs/zh/references/validation.md) | [English](validation.md) | [日本語](../docs/ja/references/validation.md)
+
 Date: 2026-11-15. Host: macOS ARM64. PDF engine tested: PyMuPDF 1.26.5. Tests use synthetic documents, not user PDFs. No book content, source scans, credentials or extracted source fonts are distributed in the package.
 
 ## Processing regression checks — passed
@@ -34,3 +36,15 @@ A real browser displayed the generated native-text fixture with readable English
 ## What these checks do not prove
 
 They do not certify pixel identity for arbitrary PDF layouts, universal OCR accuracy, original-font recovery from scans, or successful processing of corrupt/encrypted files without recoverable bytes/passwords. All generated documents begin in draft state and retain a page-by-page acceptance ledger. Cross-platform format compatibility is separate from the availability of a particular OCR engine or host permission.
+
+## Raster regression additions — passed locally
+
+Synthetic checks cover a scan occupying 58.9% of the page, its rotated placement, two sub-threshold tiles whose union covers the page, and a hybrid native-header/scan page. None is exported as artwork. Refresh preserves manual text/notes, excludes legacy page rasters and resets acceptance flags. Confirmed small illustrations remain available. `node scripts/reader_selftest.js` executes the actual reader against a minimal DOM and checks legacy, matrix-only, inconsistent-bbox, tiled and unreviewed rasters are withheld while approved small artwork and visible selectable text remain. This is a renderer regression check, not a replacement for visual comparison of every source page.
+
+## Source-driven fidelity workflow — local development checks
+
+`scripts/fidelity_selftest.py` passes 16 synthetic component checks: color/region analysis, full worklists/contact sheets, preserved manual notes, required/current visual evidence, stable build timestamps, invalidation after layout/renderer edits, rejection of review flags in patches and source-comparison captures, difference/worst-region reports, rejection of large mismatches, OCR/layout synchronization, capture aspect ratio, explicit residuals and OCR fallback routes. Its images deliberately test comparison mathematics; they are not browser captures and are never evidence that an arbitrary document was reconstructed.
+
+A separate real browser smoke test opened a new synthetic native PDF's rebuilt page in `?qa=1` mode. It showed visible selectable text and independent panel geometry, no source image, a hidden reader shell, the correct 360×480 page rectangle, and a ready DOM metadata record bound to the current fingerprint. DOM JSON is exposed for hosts whose browser tools cannot read application globals. This verifies the capture protocol, not full-document pixel identity or universal scan reconstruction.
+
+The existing PDF/OCR suite and renderer image-policy suite remain required. CI now also runs the fidelity component suite on Windows, macOS and Linux. The development version is `1.1.0-dev`; no release or remote CI result is implied by these local checks.

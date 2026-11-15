@@ -73,7 +73,16 @@ def fuse(blocks):
 
 def run(image,languages,width,height,backend,cache,command=None):
  cap=capabilities()
- if backend=='auto':backend='tesseract' if cap['tesseract'] else 'vision' if cap['vision'] else 'none'
+ if backend=='auto':
+  warnings=[];routes=(['external'] if command else [])+(['vision'] if cap['vision'] else [])+(['tesseract'] if cap['tesseract'] else [])
+  for route in routes:
+   try:
+    result=run(image,languages,width,height,route,cache,command);warnings+=result.get('warnings',[])
+    if result.get('blocks'):
+     result['warnings']=warnings+['ocr_auto_backend:'+route];return result
+    warnings.append('ocr_auto_empty:'+route)
+   except Exception as error:warnings.append('ocr_auto_failed:'+route+':'+str(error))
+  return {'coordinate_space':'pixels','width':width,'height':height,'blocks':[],'warnings':warnings+['ocr_backend_unavailable:use_host_vision_or_install_local_backend']}
  if backend=='tesseract' and cap['tesseract']:return tesseract(image,languages,width,height)
  if backend=='vision' and cap['vision']:return vision(image,languages,width,height,cache)
  if backend=='external' and command:return external(image,languages,width,height,command,cache)
