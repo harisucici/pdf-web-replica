@@ -1,0 +1,6 @@
+interface:
+  display_name: "PDF Web Replica"
+  short_description: "PDF extraction and faithful web reconstruction"
+  default_prompt: "Use $pdf-web-replica to extract this PDF and reconstruct it as a selectable webpage, preserving its original text and layout."
+policy:
+  allow_implicit_invocation: true

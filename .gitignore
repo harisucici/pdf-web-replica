@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+.pdf-web-env/
+.env
+.env.*
+work/
+outputs/
+dist/
+*.pdf
+*.log
+*.zip
+*.sha256
+runtime.local.json
