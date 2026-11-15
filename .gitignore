@@ -13,3 +13,4 @@ dist/
 *.zip
 *.sha256
 runtime.local.json
+.idea/

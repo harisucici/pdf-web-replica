@@ -39,11 +39,13 @@ python3 scripts/bootstrap.py --venv work/.pdf-web-env
 如果需要隔离环境，后续使用 bootstrap 返回的 Python 路径：
 
 ```sh
-python scripts/run.py build "输入.pdf" --out "outputs/文档" --languages ja,zh,ko,en
-python scripts/run.py batch "PDF目录" --out "outputs/批量" --languages zh,en
-python scripts/run.py build "输入.pdf" --out "outputs/文档" --resume --retry-pending
-python scripts/run.py audit "outputs/文档"
+python scripts/run.py build "example.pdf" --out "outputs/example" --languages ja,zh,ko,en
+python scripts/run.py batch "pdf-folder" --out "outputs/batch" --languages zh,en
+python scripts/run.py build "example.pdf" --out "outputs/example" --resume --retry-pending
+python scripts/run.py audit "outputs/example"
 ```
+
+未指定其他输出位置时，Agent 使用 `outputs/<PDF文件名（去掉 .pdf）>/`，目录保留原文件名，不翻译或替换成固定名称。例如 `example.pdf` 对应 `outputs/example/site/index.html`。CLI 仍需通过 `--out` 显式传入输出路径。
 
 `site/index.html` 为网页，`extracted.txt` 为文字，`manifest.json` 为逐页记录，`references/` 为本地对照图。网页文字和原生矢量图形可直接复用；扫描页必须继续由 Agent 重建分区、框线、注音等元素。脚本生成的是可继续校对的底稿，不能把“一次转换成功”当成“完全复刻通过”。
 
@@ -61,10 +63,10 @@ python scripts/selftest.py --out work/独立视觉测试目录 --vision
 
 ## GitHub 与版本管理
 
-源码仓库：<https://github.com/harisucici/pdf-web-replica>。当前为私有仓库，需要有访问权限的 GitHub 账号。
+源码仓库：<https://github.com/harisucici/pdf-web-replica>。当前为公开仓库，可直接克隆。
 
 ```sh
-gh repo clone harisucici/pdf-web-replica
+git clone https://github.com/harisucici/pdf-web-replica.git
 cd pdf-web-replica
 python3 scripts/install.py --agent hermes
 ```

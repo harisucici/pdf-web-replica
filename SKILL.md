@@ -22,6 +22,7 @@ Process a PDF or a folder of PDFs into extracted text and a faithful web documen
 
 ## Required output behavior
 
+- Unless the user specifies an output path, use `outputs/<pdf-stem>/`, where `<pdf-stem>` is the original PDF filename with only its final `.pdf` extension removed. Preserve its spelling, spaces, and language; do not translate it or replace it with a generic name. The webpage entry is `outputs/<pdf-stem>/site/index.html`. Pass this path explicitly to `--out`.
 - Main content is real, selectable, visible Unicode web text. Regions and borders are HTML/CSS or independent native vector elements. Illustrations may be separate assets.
 - A page screenshot, PDF iframe, traced scan, outlined text, or invisible OCR overlay is **not** a reconstructed text webpage. Do not use one as the default page/background. Reference images are for comparison only and must be labeled.
 - Preserve each page's dimensions, crop and rotation. Reset scroll on page changes. Distinguish a truly blank source page from loading errors or missing OCR; show an explicit external status notice.
