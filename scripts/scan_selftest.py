@@ -77,6 +77,8 @@ def checks(work):
     chosen=rapid_ocr.choose_segments('日本語', [c('日',0),c('本',10),c('語',20)],.99,
                                   '한글', [c('한',0),c('글',10)],.8)
     assert len(chosen)==1 and chosen[0][0]=='日本語'
+    assert rapid_ocr.supported(['ja','en','vi'])
+    assert rapid_ocr.language('Đính kèm tiếng Việt')=='vi'
     # Mixed lines retain the genuine Japanese prefix and a separate Korean suffix.
     chosen=rapid_ocr.choose_segments('意味/早',[c('意',0),c('味',10),c('/',20),c('早',40)],.8,
                                   '의미',[c('의',40),c('미',50)],.95)

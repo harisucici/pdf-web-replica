@@ -3,7 +3,7 @@ name: pdf-web-replica
 description: Reconstruct PDFs as selectable web pages, preserving original layout and styling through source analysis, OCR, iterative visual comparison and page-by-page verification.
 license: MIT
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # PDF Web Replica

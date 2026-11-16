@@ -120,7 +120,7 @@ def fit_text(block, gray, sx, sy, faces):
     x, y, x1, y1 = bb
     text = block['text']; lang = block.get('language', 'ja').split('-')[0]
     lang = {'jpn':'ja','eng':'en','kor':'ko','chi':'zh'}.get(lang, lang)
-    candidates = [f for f in faces if lang in f.get('languages', [])]
+    candidates = [f for f in faces if lang in f.get('languages', []) or (lang=='vi' and 'en' in f.get('languages', []))]
     if not candidates:
         return {**block, 'font_fit_pending': 'no_installed_font_for:' + lang}
     actual = gray[y:y1, x:x1].astype('float32')

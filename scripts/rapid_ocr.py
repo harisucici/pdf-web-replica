@@ -10,7 +10,7 @@ from importlib import metadata
 import re
 from pathlib import Path
 
-SUPPORTED = {'auto', 'ja', 'zh', 'zh-hant', 'en', 'ko'}
+SUPPORTED = {'auto', 'ja', 'zh', 'zh-hant', 'en', 'ko', 'vi'}
 _ENGINES = {}
 _MODEL_HASHES = {}
 
@@ -56,6 +56,8 @@ def language(text):
         return 'ja'
     if re.search('[一-龯]', text):
         return 'zh'
+    if re.search('[ĂăĐđƠơƯưẠ-ỹ]', text):
+        return 'vi'
     return 'en'
 
 

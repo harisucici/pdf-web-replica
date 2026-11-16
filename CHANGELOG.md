@@ -2,6 +2,10 @@
 
 [中文](docs/zh/CHANGELOG.md) | [English](CHANGELOG.md) | [日本語](docs/ja/CHANGELOG.md)
 
+## 1.1.1 — 2026-11-16
+
+- Add explicit Vietnamese routing, diacritic/script labels and Latin-font fitting for Japanese/English/Vietnamese study books.
+
 ## 1.1.0 — 2026-11-16
 
 - Continue OCR auto mode through installed fallback routes after failure/empty output; preserve PDF stems and relative folders in batch output. Explicit unresolved source differences block acceptance.

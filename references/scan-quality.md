@@ -114,3 +114,5 @@ downgrade to first-pass OCR or claim a percentage of reconstruction.
 For a user-requested partial range, run `audit <output> --allow-range`. Keep the ordinary full-document audit for full-book requests and unfinished processing chunks; do not use this switch to hide omitted requested pages.
 
 The enhanced dependency file pins RapidOCR and OpenCV, and restricts NumPy to the tested ABI range. Native inference runs in a persistent child: a native exit or timeout becomes an ordinary page/backend failure, rather than terminating the whole PDF build. `doctor` lists the installed package versions and model routes; `work/ocr-runtime.json` records model hashes. Use the pinned isolated runtime when recovering `rapidocr_native_worker_exited`, then retry only the affected pages.
+
+Identify each book's actual translation languages before batch OCR. For Japanese/English/Vietnamese editions use `--languages ja,en,vi`; retain Vietnamese diacritics and fit available Latin font faces. Do not enable Korean just because another volume used it. Model support is source-language specific, not a fixed four-language book template.
