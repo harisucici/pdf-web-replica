@@ -82,14 +82,14 @@ def load_font(path, index):
     return ImageFont.truetype(str(Path(path).expanduser()), 64, index=index)
 
 
-def ink_box(gray, box, white=False):
+def ink_box(gray, box, white=False, background=255):
     cv2, np, _, _, _ = dependencies()
     x0, y0, x1, y1 = [int(round(v)) for v in box]
     x0, y0, x1, y1 = max(0, x0), max(0, y0), min(gray.shape[1], x1), min(gray.shape[0], y1)
     crop = gray[y0:y1, x0:x1]
     if not crop.size:
         return None
-    ink = crop > 210 if white else crop < 155
+    ink = crop > min(245,max(180,background+25)) if white else crop < min(180,background-25)
     rows = ink.sum(axis=1)
     good = rows > max(1, rows.max()*.04)
     runs, start = [], None
@@ -108,13 +108,21 @@ def ink_box(gray, box, white=False):
 
 def fit_text(block, gray, sx, sy, faces):
     cv2, np, Image, _, ImageDraw = dependencies()
-    box = [v*(sx if i % 2 == 0 else sy) for i, v in enumerate(block['bbox'])]
+    source_box=block.get('ocr_bbox',block['bbox']) if block.get('source')=='ocr' else block['bbox']
+    box = [v*(sx if i % 2 == 0 else sy) for i, v in enumerate(source_box)]
     x, y, x1, y1 = [int(round(v)) for v in box]
     crop = gray[max(0,y):y1, max(0,x):x1]
     if not crop.size:
         return block
-    white = float(np.median(crop)) < 175 and float(np.mean(crop > 210)) > .04
-    bb = ink_box(gray, box, white)
+    pad=max(2,round(min(sx,sy)))
+    rx,ry,rx1,ry1=max(0,x-pad),max(0,y-pad),min(gray.shape[1],x1+pad),min(gray.shape[0],y1+pad)
+    ring=gray[ry:ry1,rx:rx1];rm=np.ones(ring.shape,dtype=bool)
+    rm[max(0,y-ry):y1-ry,max(0,x-rx):x1-rx]=False
+    background=float(np.median(ring[rm])) if np.any(rm) else float(np.percentile(crop,90))
+    lighter=int(np.count_nonzero(crop.astype('float32')>background+20))
+    darker=int(np.count_nonzero(crop.astype('float32')<background-20))
+    white=lighter>max(3,darker*1.2)
+    bb = ink_box(gray, box, white,background)
     if bb is None:
         return block
     x, y, x1, y1 = bb
@@ -124,8 +132,8 @@ def fit_text(block, gray, sx, sy, faces):
     if not candidates:
         return {**block, 'font_fit_pending': 'no_installed_font_for:' + lang}
     actual = gray[y:y1, x:x1].astype('float32')
-    bg = max(200, float(np.percentile(actual, 92)))
-    target = np.clip((actual-30)/200 if white else (bg-actual)/(bg-30), 0, 1)
+    bg=background
+    target=np.clip((actual-bg)/max(20,255-bg) if white else (bg-actual)/max(20,bg-30),0,1)
     # Underlines are geometry, not extra height or extra-bold glyph strokes.
     target[np.mean(target > .6, axis=1) > .85] = 0
     target = cv2.GaussianBlur(target, (3,3), .55)

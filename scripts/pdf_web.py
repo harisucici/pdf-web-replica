@@ -197,7 +197,7 @@ def normalize_ocr(result,width,height):
   if not all(math.isfinite(v) for v in b) or b[2]<=b[0] or b[3]<=b[1]:continue
   size=item.get('font_size') or max(3,(b[3]-b[1])*.82)
   rtl=sum(unicodedata.bidirectional(c) in ['R','AL'] for c in item['text'])>len(item['text'])/3
-  blocks.append({'text':item['text'],'bbox':b,'origin':item.get('origin',[b[0],b[3]-(b[3]-b[1])*.12]),'font_size':size,'font_family':item.get('font_family'),'color':item.get('color','#222'),'bold':item.get('bold',False),'italic':item.get('italic',False),'angle':item.get('angle',0),'advance':item.get('advance',b[2]-b[0]),'source':'ocr','language':item.get('language','unknown'),'confidence':item.get('confidence'),'rtl':rtl,'role':item.get('role','text'),'characters':[{'text':c['text'],'confidence':c.get('confidence'),'bbox':[v*(sx if j%2==0 else sy) for j,v in enumerate(c['bbox'])]} for c in item.get('characters',[])]})
+  blocks.append({'text':item['text'],'bbox':b,'ocr_bbox':list(b),'origin':item.get('origin',[b[0],b[3]-(b[3]-b[1])*.12]),'font_size':size,'font_family':item.get('font_family'),'color':item.get('color','#222'),'bold':item.get('bold',False),'italic':item.get('italic',False),'angle':item.get('angle',0),'advance':item.get('advance',b[2]-b[0]),'source':'ocr','language':item.get('language','unknown'),'confidence':item.get('confidence'),'rtl':rtl,'role':item.get('role','text'),'characters':[{'text':c['text'],'confidence':c.get('confidence'),'bbox':[v*(sx if j%2==0 else sy) for j,v in enumerate(c['bbox'])]} for c in item.get('characters',[])]})
  return blocks
 
 def refresh(out):

@@ -2,9 +2,13 @@
 
 [中文](docs/zh/CHANGELOG.md) | [English](CHANGELOG.md) | [日本語](docs/ja/CHANGELOG.md)
 
+## 1.1.2 — 2026-11-16
+
+- Preserve original OCR geometry during repeated fitting and infer text contrast from surrounding background, keeping black-on-white and white-on-gray numerals legible.
+
 ## 1.1.1 — 2026-11-16
 
-- Add explicit Vietnamese routing, diacritic/script labels and Latin-font fitting for Japanese/English/Vietnamese study books.
+- Add explicit Vietnamese routing, diacritic/script labels and Latin-font fitting for Japanese/English/Vietnamese study books. Infer glyph polarity from surrounding source background and retain original OCR boxes across repeated refinement.
 
 ## 1.1.0 — 2026-11-16
 

@@ -20,7 +20,7 @@ def split_number_prefixes(blocks):
         for text,items,lang in [(m[1],a,'en'),(b['text'][cut:],z,b.get('language','ja'))]:
             boxes=[c['bbox'] for c in items]
             bb=[min(v[0] for v in boxes),min(v[1] for v in boxes),max(v[2] for v in boxes),max(v[3] for v in boxes)]
-            result.append({**b,'text':text,'bbox':bb,'characters':items,'language':lang})
+            result.append({**b,'text':text,'bbox':bb,'ocr_bbox':list(bb),'characters':items,'language':lang})
     return result
 
 

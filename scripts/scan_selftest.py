@@ -36,6 +36,8 @@ def checks(work):
     draw.ellipse((80,370,120,410),fill='#808080')
     numfont=ImageFont.truetype(face['path'],22,index=face.get('index',0))
     draw.text((94,374),'1',font=numfont,fill='white')
+    draw.rectangle((135,355,205,425),fill='#eeeeee');draw.ellipse((150,370,190,410),fill='white')
+    draw.text((161,374),'8',font=numfont,fill='#222222')
     for x in (400,424,448):draw.rectangle((x,380,x+18,398),outline='#777777',width=1)
     ref=work/'references/00001.png';ref.parent.mkdir(parents=True);image.save(ref)
     page={'page':1,'width':300,'height':400,'rotation':0,'kind':'scan','status':'draft',
@@ -44,12 +46,15 @@ def checks(work):
           'shapes':[],'images':[],'text':'Original serif baseline','warnings':[],
           'review':{k:False for k in ('text','layout','fonts','languages')}}
     page['blocks'].append({'text':'1','bbox':[44,187,57,205],'font_size':12,'source':'ocr','language':'en','confidence':.99})
+    page['blocks'].append({'text':'8','bbox':[79,187,91,205],'font_size':12,'source':'ocr','language':'en','confidence':.99})
     write(work/'pages/00001.json',page);(work/'site').mkdir()
     result=scan.enhance(work,[1],write)
     revised=json.loads((work/'pages/00001.json').read_text())
     assert result['status']=='draft' and revised['blocks'][0]['font_size']<25
     assert revised['blocks'][0]['font_family']==face['family'],revised['blocks'][0]
     assert revised['blocks'][0]['text']==page['text']
+    assert revised['blocks'][1]['color']=='#fff','white source numeral was recolored dark'
+    assert revised['blocks'][2]['color']!='#fff','black source numeral was recolored white'
     assert (work/'work/enhance-backups/00001.json').exists()
     # Flat panel rebuilt; the lettering is never converted into a glyph path.
     assert any(s.get('fill')!='none' for s in revised['shapes'])
