@@ -87,3 +87,5 @@ The audit passes only with complete requested coverage, current evidence and the
 ## Remaining differences
 
 A layout patch may set `remaining_differences` to a list of concise unresolved source differences, including region/page details and the concrete blocker where applicable. These are reported by audit and prevent review approval. After actually resolving an item, update the list through a new patch; never erase it merely to pass. An empty list does not replace browser evidence or source checks. Clear search highlighting before captures; highlighted pages are not the default source-matching view.
+
+For a user-requested partial range, run `audit <output> --allow-range`. Keep the ordinary full-document audit for full-book requests and unfinished processing chunks; do not use this switch to hide omitted requested pages.

@@ -23,7 +23,7 @@ def main():
   if not a.update:p.error(f'Already exists: {dst}; use --update to preserve a backup and replace it')
   backup=dst.parent.parent/'skill-backups'/(dst.name+'-'+str(time.time_ns()));backup.parent.mkdir(parents=True,exist_ok=True);dst.rename(backup)
  dst.parent.mkdir(parents=True,exist_ok=True)
- try:shutil.copytree(src,dst,ignore=shutil.ignore_patterns('__pycache__','*.pyc','.venv','.git'))
+ try:shutil.copytree(src,dst,ignore=shutil.ignore_patterns('__pycache__','*.pyc','*.pyo','.venv','.pdf-web-env','.git','.idea','work','outputs','dist','.env','.env.*','runtime.local.json'))
  except Exception:
   if dst.exists():shutil.rmtree(dst)
   if backup:backup.rename(dst)

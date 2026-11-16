@@ -40,3 +40,12 @@ assert.ok(get('paper').querySelectorAll('span').some(el=>el.textContent==='Selec
 assert.equal(get('compare').attrs['aria-pressed'],'false');
 assert.ok(!get('paper').querySelectorAll('img').some(el=>el.src==='reference-pages/001.webp'));
 console.log('Passed native web-layout regression: HTML text and panels retained, artwork approved, source reference absent from default view.');
+
+get('paper').setAttribute('data-qa-ready','true');
+vm.runInContext('show(0)',context);
+assert.equal(get('paper').attrs['data-qa-ready'],'false','navigation must clear the previous capture readiness immediately');
+get('find').value='source';vm.runInContext('render(fixture)',context);
+assert.equal(window.PDF_REPLICA_QA.default_view,false);
+assert.equal(window.PDF_REPLICA_QA.search_active,true);
+assert.equal(window.PDF_REPLICA_QA.ready,false);
+console.log('Passed capture-state regression: navigation and highlighted search cannot masquerade as a ready default page.');

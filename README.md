@@ -126,3 +126,12 @@ python3 scripts/package.py --out dist
 ```
 
 GitHub Actions 会在 Windows、macOS、Linux 上运行合成 PDF 测试；macOS 额外检查 Vision OCR。自动检查通过不代表任意输入文档的版式已经完成逐页验收。
+
+新版默认质量基线：使用增强本地 OCR，分离正文/注音，匹配明朝与黑体，图标从原 PDF 裁切。详见[扫描件复刻流程](docs/zh/references/scan-quality.md)。
+
+```sh
+python3 scripts/bootstrap.py --venv work/.pdf-web-env --enhanced-ocr
+# Use the returned Python interpreter:
+<python> scripts/run.py build "book.pdf" --out "outputs/book" --languages ja,zh,ko,en --ocr rapidocr
+<python> scripts/run.py enhance "outputs/book" --refine-ruby
+```

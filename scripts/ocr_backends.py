@@ -1,9 +1,15 @@
 """Local OCR adapters. Commands are argument arrays, never shell strings."""
-import csv,io,json,os,platform,re,shutil,subprocess
+import csv,io,json,os,platform,re,shutil,subprocess,importlib.util
 from pathlib import Path
 ALIASES={'en':'eng','ja':'jpn','zh':'chi_sim','zh-hant':'chi_tra','ko':'kor','ar':'ara','ru':'rus','de':'deu','fr':'fra','es':'spa','he':'heb','hi':'hin','pt':'por','it':'ita'}
 APPLE={'en':'en-US','ja':'ja-JP','zh':'zh-Hans','zh-hant':'zh-Hant','ko':'ko-KR','ar':'ar-SA','ru':'ru-RU','de':'de-DE','fr':'fr-FR','es':'es-ES','pt':'pt-BR','it':'it-IT'}
-def capabilities():return {'tesseract':shutil.which('tesseract'),'vision':platform.system()=='Darwin' and bool(shutil.which('swiftc'))}
+def capabilities():
+ cap={'tesseract':shutil.which('tesseract'),'vision':platform.system()=='Darwin' and bool(shutil.which('swiftc')),'rapidocr':all(importlib.util.find_spec(n) is not None for n in ('rapidocr','onnxruntime','cv2','numpy'))}
+ if cap['rapidocr']:
+  from importlib import metadata
+  cap['rapidocr_versions']={n:metadata.version(n) for n in ('rapidocr','onnxruntime','opencv-python-headless','numpy')}
+  cap['rapidocr_routes']={'main':'PP-OCRv6/small','ko':'PP-OCRv5/mobile','ruby_recheck':'PP-OCRv4/japan/mobile','isolation':'persistent child process'}
+ return cap
 def _run(cmd,timeout=180):
  r=subprocess.run(cmd,capture_output=True,text=True,timeout=timeout)
  if r.returncode:raise RuntimeError((r.stderr or r.stdout or 'OCR failed')[-1200:])
@@ -74,7 +80,8 @@ def fuse(blocks):
 def run(image,languages,width,height,backend,cache,command=None):
  cap=capabilities()
  if backend=='auto':
-  warnings=[];routes=(['external'] if command else [])+(['vision'] if cap['vision'] else [])+(['tesseract'] if cap['tesseract'] else [])
+  import rapid_ocr
+  warnings=[];routes=(['external'] if command else [])+(['rapidocr'] if cap.get('rapidocr') and rapid_ocr.supported(languages) else [])+(['vision'] if cap.get('vision') else [])+(['tesseract'] if cap.get('tesseract') else [])
   for route in routes:
    try:
     result=run(image,languages,width,height,route,cache,command);warnings+=result.get('warnings',[])
@@ -83,7 +90,10 @@ def run(image,languages,width,height,backend,cache,command=None):
     warnings.append('ocr_auto_empty:'+route)
    except Exception as error:warnings.append('ocr_auto_failed:'+route+':'+str(error))
   return {'coordinate_space':'pixels','width':width,'height':height,'blocks':[],'warnings':warnings+['ocr_backend_unavailable:use_host_vision_or_install_local_backend']}
- if backend=='tesseract' and cap['tesseract']:return tesseract(image,languages,width,height)
+ if backend=='rapidocr' and cap.get('rapidocr'):
+  import rapid_ocr
+  return rapid_ocr.recognize(image,languages,cache)
+ if backend=='tesseract' and cap.get('tesseract'):return tesseract(image,languages,width,height)
  if backend=='vision' and cap['vision']:return vision(image,languages,width,height,cache)
  if backend=='external' and command:return external(image,languages,width,height,command,cache)
  return {'coordinate_space':'pixels','width':width,'height':height,'blocks':[],'warnings':['ocr_backend_unavailable:use_host_vision_or_install_local_backend']}

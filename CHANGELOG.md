@@ -2,7 +2,7 @@
 
 [中文](docs/zh/CHANGELOG.md) | [English](CHANGELOG.md) | [日本語](docs/ja/CHANGELOG.md)
 
-## Unreleased
+## 1.1.0 — 2026-11-16
 
 - Continue OCR auto mode through installed fallback routes after failure/empty output; preserve PDF stems and relative folders in batch output. Explicit unresolved source differences block acceptance.
 
@@ -26,3 +26,7 @@
 - Synthetic regression coverage and browser checks; generated documents remain drafts until source verification.
 
 This release does not guarantee perfect OCR or pixel-identical reconstruction of every possible PDF.
+
+- Local enhanced PP-OCR, character coordinates, source glyph/font fitting, literal ruby rechecks, source artwork crops with transparent text exclusions, and a required repeatable source-quality baseline.
+
+- Pin the tested enhanced runtime, isolate native OCR crashes, preserve model provenance, recover number disks and checkboxes, and invalidate stale/highlighted browser capture readiness.

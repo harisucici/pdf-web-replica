@@ -3,7 +3,7 @@
 import argparse,hashlib,json,re,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-FILES=['SKILL.md','README.md','README.en.md','README.ja.md','LICENSE','requirements.txt','CHANGELOG.md']
+FILES=['SKILL.md','README.md','README.en.md','README.ja.md','LICENSE','requirements.txt','requirements-ocr.txt','CHANGELOG.md']
 DIRECTORIES=['agents','assets','references','scripts','docs']
 def main():
  p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);a=p.parse_args()

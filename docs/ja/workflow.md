@@ -44,3 +44,7 @@ python scripts/run.py audit outputs/book
 ```
 
 `batch`、`import-ocr`、`--resume`、`--retry-pending`、`--pages` で長文・複数文書を扱えます。詳細形式と復旧は参照文書を使い、代表ページだけで全体の確認を付けません。
+
+## 毎回適用する品質基準
+
+スキャンは[強化 OCR と原本図版の手順](references/scan-quality.md)に従い、本文・ルビ・番号、明朝/ゴシック、色と座標を合わせ、図版を原 PDF から切り出して全ページを比較します。OCR 初稿だけでは完了しません。

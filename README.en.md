@@ -126,3 +126,12 @@ python3 scripts/package.py --out dist
 ```
 
 GitHub Actions runs synthetic PDF checks on Windows, macOS and Linux, with an additional Vision check on macOS. Passing automated checks does not establish page-by-page layout acceptance for an arbitrary document.
+
+The source-quality route uses enhanced local OCR, separates body/ruby, matches serif/sans glyphs and crops artwork from the original PDF. See the [scan reconstruction procedure](references/scan-quality.md).
+
+```sh
+python3 scripts/bootstrap.py --venv work/.pdf-web-env --enhanced-ocr
+# Use the returned Python interpreter:
+<python> scripts/run.py build "book.pdf" --out "outputs/book" --languages ja,zh,ko,en --ocr rapidocr
+<python> scripts/run.py enhance "outputs/book" --refine-ruby
+```

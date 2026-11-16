@@ -44,3 +44,7 @@ python scripts/run.py audit outputs/book
 ```
 
 `batch`、`import-ocr`、`--resume`、`--retry-pending`、`--pages` 支持长文档与批量任务。详细格式与恢复方法见链接文档，不能抽样后批量勾选整本书。
+
+## 每次调用的默认质量基线
+
+扫描件必须执行[增强识别与原图裁切流程](references/scan-quality.md)：正文/注音/题号分离、明朝与黑体字形比对、原色与坐标重建、图标从 PDF 裁切，然后逐页实测比较。不能只交 OCR 初稿。

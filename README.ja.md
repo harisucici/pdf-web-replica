@@ -126,3 +126,12 @@ python3 scripts/package.py --out dist
 ```
 
 GitHub Actions は Windows、macOS、Linux で合成 PDF のテストを行い、macOS では Vision も確認します。自動テストに合格しても、任意の PDF の全ページでレイアウト検証が完了したことにはなりません。
+
+強化ローカル OCR、本文とルビの分離、明朝/ゴシックの字形照合、原 PDF からの図版切り出しを使います。[スキャン再構築手順](docs/ja/references/scan-quality.md)。
+
+```sh
+python3 scripts/bootstrap.py --venv work/.pdf-web-env --enhanced-ocr
+# Use the returned Python interpreter:
+<python> scripts/run.py build "book.pdf" --out "outputs/book" --languages ja,zh,ko,en --ocr rapidocr
+<python> scripts/run.py enhance "outputs/book" --refine-ruby
+```

@@ -6,6 +6,7 @@ import ocr_backends
 import image_policy
 import fidelity
 import layout_analysis
+import scan_reconstruction
 try:import pymupdf as fitz
 except ImportError:
  try:import fitz
@@ -196,7 +197,7 @@ def normalize_ocr(result,width,height):
   if not all(math.isfinite(v) for v in b) or b[2]<=b[0] or b[3]<=b[1]:continue
   size=item.get('font_size') or max(3,(b[3]-b[1])*.82)
   rtl=sum(unicodedata.bidirectional(c) in ['R','AL'] for c in item['text'])>len(item['text'])/3
-  blocks.append({'text':item['text'],'bbox':b,'origin':item.get('origin',[b[0],b[3]-(b[3]-b[1])*.12]),'font_size':size,'font_family':item.get('font_family'),'color':item.get('color','#222'),'bold':item.get('bold',False),'italic':item.get('italic',False),'angle':item.get('angle',0),'advance':item.get('advance',b[2]-b[0]),'source':'ocr','language':item.get('language','unknown'),'confidence':item.get('confidence'),'rtl':rtl,'role':'text'})
+  blocks.append({'text':item['text'],'bbox':b,'origin':item.get('origin',[b[0],b[3]-(b[3]-b[1])*.12]),'font_size':size,'font_family':item.get('font_family'),'color':item.get('color','#222'),'bold':item.get('bold',False),'italic':item.get('italic',False),'angle':item.get('angle',0),'advance':item.get('advance',b[2]-b[0]),'source':'ocr','language':item.get('language','unknown'),'confidence':item.get('confidence'),'rtl':rtl,'role':item.get('role','text'),'characters':[{'text':c['text'],'confidence':c.get('confidence'),'bbox':[v*(sx if j%2==0 else sy) for j,v in enumerate(c['bbox'])]} for c in item.get('characters',[])]})
  return blocks
 
 def refresh(out):
@@ -235,7 +236,7 @@ def build(args):
  if mf.exists():
   old=json.loads(mf.read_text());selected=sorted(set(old['selected_pages'])|set(selected))
  else:old={'schema_version':1,'source_sha256':source_hash,'source_name':source.name,'page_count':len(doc),'selected_pages':selected,'title':source.stem,'status':'draft'}
- old['selected_pages']=selected;write_json(mf,old);write_json(out/'inspection.json',inventory(doc));fonts={};languages=args.languages.split(',')
+ old['selected_pages']=selected;old['conversion_profile']={'dpi':args.dpi,'ocr':args.ocr,'languages':args.languages.split(','),'artwork':'source-cropped','text':'visible_unicode','quality_reference':'references/scan-quality.md'};write_json(mf,old);write_json(out/'inspection.json',inventory(doc));fonts={};languages=args.languages.split(',');enhance_pages=[]
  for no in requested:
   target=out/'pages'/f'{no:05}.json'
   if target.exists() and args.resume and not args.reprocess:
@@ -259,6 +260,7 @@ def build(args):
         if not duplicate:blocks.append(ob)
       else:blocks=ocr+[b for b in blocks if b['role']=='form_field']
       ocr_success=True
+      if any(b.get('characters') or b.get('role')=='vertical_text' for b in ocr):enhance_pages.append(no)
     except Exception as e:warnings.append('ocr_failed:'+str(e))
    if kind!='blank':warnings.append('source_text_layout_fonts_and_languages_not_yet_verified')
    if needs_ocr:warnings.append('scan_regions_and_nontext_artwork_require_native_reconstruction')
@@ -268,7 +270,9 @@ def build(args):
    data={'page':no,'width':width,'height':height,'rotation':page.rotation,'kind':kind,'status':status,'blocks':blocks,'shapes':shapes,'images':images,'warnings':sorted(set(warnings)),'text':'\n'.join(b['text'] for b in sorted(blocks,key=lambda x:(round(x['bbox'][1],1),x['bbox'][0]))),'review':{k:False for k in ['text','layout','fonts','languages']}}
   except Exception as e:data={'page':no,'width':612,'height':792,'rotation':0,'kind':'error','status':'error','blocks':[],'shapes':[],'images':[],'warnings':[str(e)],'text':'','review':{k:False for k in ['text','layout','fonts','languages']}}
   write_json(target,data);print(json.dumps({'page':no,'total_selected':len(selected),'status':data['status']},ensure_ascii=False),flush=True)
- doc.close();manifest=refresh(out);print(json.dumps({'output':str(out),'site':str(site/'index.html'),'pages':len(selected),'pending':sum(p['status'] in ['needs_ocr','error','pending'] for p in manifest['pages']),'pending_review_pages':len(selected),'next_steps':['analyze source pages','reconstruct from source','capture default web pages','compare and correct','record source review','audit'],'status':'draft'},ensure_ascii=False));return 0
+ doc.close()
+ if enhance_pages:scan_reconstruction.enhance(out,enhance_pages,write_json)
+ manifest=refresh(out);print(json.dumps({'output':str(out),'site':str(site/'index.html'),'pages':len(selected),'pending':sum(p['status'] in ['needs_ocr','error','pending'] for p in manifest['pages']),'pending_review_pages':len(selected),'next_steps':['analyze source pages','reconstruct from source','capture default web pages','compare and correct','record source review','audit'],'status':'draft'},ensure_ascii=False));return 0
 
 def audit(out,allow_range=False):
  out=Path(out);m=json.loads((out/'manifest.json').read_text());issues=[];verified=0
@@ -301,12 +305,14 @@ def main():
  sp.add_parser('doctor')
  ins=sp.add_parser('inspect');ins.add_argument('input');ins.add_argument('--out');ins.add_argument('--password-env')
  for name in ['build','batch']:
-  b=sp.add_parser(name);b.add_argument('input');b.add_argument('--out',required=True);b.add_argument('--pages',default='all');b.add_argument('--languages',default='auto');b.add_argument('--ocr',choices=['auto','none','tesseract','vision','external'],default='auto');b.add_argument('--ocr-command-json');b.add_argument('--dpi',type=int,default=144);b.add_argument('--password-env');b.add_argument('--resume',action='store_true');b.add_argument('--retry-pending',action='store_true');b.add_argument('--reprocess',action='store_true')
+  b=sp.add_parser(name);b.add_argument('input');b.add_argument('--out',required=True);b.add_argument('--pages',default='all');b.add_argument('--languages',default='auto');b.add_argument('--ocr',choices=['auto','none','tesseract','vision','rapidocr','external'],default='auto');b.add_argument('--ocr-command-json');b.add_argument('--dpi',type=int,default=216);b.add_argument('--password-env');b.add_argument('--resume',action='store_true');b.add_argument('--retry-pending',action='store_true');b.add_argument('--reprocess',action='store_true')
  a=sp.add_parser('attachments');a.add_argument('input');a.add_argument('--out',required=True);a.add_argument('--password-env')
  a=sp.add_parser('audit');a.add_argument('out');a.add_argument('--allow-range',action='store_true')
  a=sp.add_parser('refresh');a.add_argument('out')
  a=sp.add_parser('import-ocr');a.add_argument('out');a.add_argument('--page',type=int,required=True);a.add_argument('--json',required=True)
  a=sp.add_parser('analyze');a.add_argument('out');a.add_argument('--pages',default='all')
+ a=sp.add_parser('enhance');a.add_argument('out');a.add_argument('--pages',default='all');a.add_argument('--font-config');a.add_argument('--refine-ruby',action='store_true')
+ a=sp.add_parser('crop-artwork');a.add_argument('out');a.add_argument('--page',type=int,required=True);a.add_argument('--bbox',type=float,nargs=4,required=True);a.add_argument('--exclude-text-bbox',type=float,nargs=4,action='append',default=[]);a.add_argument('--reviewed',action='store_true');a.add_argument('--note',default='')
  a=sp.add_parser('compare');a.add_argument('out');a.add_argument('--captures',required=True);a.add_argument('--pages',default='all')
  a=sp.add_parser('apply-layout');a.add_argument('out');a.add_argument('--page',type=int,required=True);a.add_argument('--json',required=True)
  a=sp.add_parser('review');a.add_argument('out');a.add_argument('--pages',required=True);a.add_argument('--checks',required=True);a.add_argument('--note',required=True)
@@ -336,6 +342,10 @@ def main():
   if args.command=='refresh':refresh(args.out);return 0
   if args.command=='analyze':
    out=Path(args.out);manifest=json.loads((out/'manifest.json').read_text());selected=page_numbers(args.pages,manifest['page_count']);selected=[n for n in selected if n in manifest['selected_pages']];print(json.dumps(layout_analysis.analyze(out,selected,write_json),ensure_ascii=False));return 0
+  if args.command=='enhance':
+   out=Path(args.out);manifest=json.loads((out/'manifest.json').read_text());selected=[n for n in page_numbers(args.pages,manifest['page_count']) if n in manifest['selected_pages']];result=scan_reconstruction.enhance(out,selected,write_json,args.font_config,args.refine_ruby);refresh(out);print(json.dumps(result,ensure_ascii=False));return 2 if result.get('errors') else 0
+  if args.command=='crop-artwork':
+   result=scan_reconstruction.crop_artwork(args.out,args.page,args.bbox,args.exclude_text_bbox,args.note,args.reviewed,write_json);refresh(args.out);print(json.dumps(result,ensure_ascii=False));return 0
   if args.command=='compare':
    out=Path(args.out);manifest=json.loads((out/'manifest.json').read_text());records=[]
    for no in page_numbers(args.pages,manifest['page_count']):
